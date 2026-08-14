@@ -22,6 +22,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useConversations } from '@/hooks/use-conversations';
+import { DEFAULT_HOSTS, localHostWarning } from '@/libs/local-model-hosts';
 import { cn } from '@/libs/utils';
 import AdminPage from '@/pages/AdminPage';
 import AuthPage from '@/pages/AuthPage';
@@ -70,7 +71,7 @@ type ConnectionProfile = {
 const DEFAULT_PROFILE: ConnectionProfile = {
   id: 'default',
   name: 'Default',
-  host: 'http://127.0.0.1:1234',
+  host: DEFAULT_HOSTS['lm-studio'],
   apiKey: '',
   style: 'lm-studio',
   chatPath: '',
@@ -88,10 +89,7 @@ const STORAGE = {
 };
 
 function styleDefaultHost(style: ConnectionStyle): string {
-  if (style === 'lm-studio') return 'http://127.0.0.1:1234';
-  if (style === 'ollama') return 'http://127.0.0.1:11434';
-  if (style === 'openai') return 'https://api.openai.com/v1';
-  return '';
+  return DEFAULT_HOSTS[style] ?? '';
 }
 
 function matchesStyle(style: ConnectionStyle, apiType: string): boolean {
@@ -935,13 +933,20 @@ function App() {
                         <Input
                           value={connectionHostDraft}
                           onChange={event => setConnectionHostDraft(event.target.value)}
-                          placeholder="http://127.0.0.1:1234"
+                          placeholder={DEFAULT_HOSTS['lm-studio']}
                           className="h-9 text-sm"
                         />
                         <Button variant="outline" onClick={verifyConnection} disabled={isVerifyingConnection}>
                           {isVerifyingConnection ? <LoaderIcon className="size-4 animate-spin" /> : 'Verify'}
                         </Button>
                       </div>
+                      {/* Warn rather than block: someone running outside Docker
+                          is entitled to point at loopback. */}
+                      {localHostWarning(connectionHostDraft) && (
+                        <p className="text-activity-tool text-xs leading-snug">
+                          {localHostWarning(connectionHostDraft)}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex gap-2">

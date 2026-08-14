@@ -223,6 +223,9 @@ def _agent_event_to_progress(event: dict) -> list[dict]:
     if agent_type == "terminated":
         return [_msg("agent:lifecycle:terminated", data)]
 
+    if agent_type == "llm_unreachable":
+        return [_msg("agent:lifecycle:llm:unreachable", data)]
+
     if agent_type == "agent_state":
         return [_msg("agent:lifecycle:state:change", data)]
 

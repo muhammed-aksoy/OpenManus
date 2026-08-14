@@ -218,6 +218,87 @@ def _is_connection_healthy(connection: dict, timeout: int = 5) -> tuple[bool, st
         return False, str(exc)
 
 
+_CONTAINER_UNREACHABLE_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
+
+
+def _running_in_container() -> bool:
+    """True when this process is inside Docker, where loopback is not the host."""
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", "r", encoding="utf-8") as handle:
+            return "docker" in handle.read() or "containerd" in handle.read()
+    except OSError:
+        return False
+
+
+def _container_subnet() -> str:
+    """This container's own /16, so a firewall hint names the right range.
+
+    Read from the container's own address rather than assumed: docker compose
+    puts services on a project network (172.18.x) while `host-gateway` still
+    resolves to the default bridge (172.17.0.1), so the two do not match.
+    """
+    try:
+        import socket as _socket
+
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as probe:
+            # No packets are sent; this just picks the outbound interface.
+            probe.connect(("10.255.255.255", 1))
+            address = probe.getsockname()[0]
+        octets = address.split(".")
+        if len(octets) == 4:
+            return f"{octets[0]}.{octets[1]}.0.0/16"
+    except Exception:
+        pass
+    return ""
+
+
+def unreachable_hint(base_url: str, detail: str) -> str:
+    """Explain a failed preflight in terms the user can act on.
+
+    The raw error ("Connection refused") is true but useless: it does not say
+    that the refusal came from inside a container that was never looking at the
+    user's machine. This is the single most common way a local Ollama or
+    LM Studio setup fails, so name it explicitly.
+    """
+    try:
+        host = urllib.parse.urlparse(str(base_url or "")).hostname or ""
+    except Exception:
+        host = ""
+    lowered = str(detail or "").lower()
+
+    if host in _CONTAINER_UNREACHABLE_HOSTS and _running_in_container():
+        return (
+            f"OpenManus runs inside a container, so {host} points at the container "
+            "itself rather than your machine. Use http://host.docker.internal"
+            f":<port> instead — docker-compose.yml maps that name to the host."
+        )
+
+    if "timed out" in lowered or "timeout" in lowered:
+        # Deliberately not naming a subnet: docker compose creates its own
+        # network (172.18.x here, not the 172.17.x default bridge), so a
+        # hard-coded range sends people to allow the wrong one and conclude the
+        # firewall was not the problem.
+        subnet = _container_subnet() or "<your container subnet>"
+        return (
+            "The connection timed out rather than being refused, which usually "
+            "means a host firewall is dropping traffic from the container. "
+            f"This container is on {subnet}; with ufw, allow it: "
+            f"sudo ufw allow from {subnet} to any port <port> proto tcp."
+        )
+
+    if "name or service not known" in lowered or "nodename nor servname" in lowered:
+        return (
+            f"The hostname in {base_url} could not be resolved. If this is "
+            "host.docker.internal on Linux, docker-compose.yml needs "
+            'extra_hosts: "host.docker.internal:host-gateway" for the web and '
+            "worker services."
+        )
+
+    return ""
+
+
 def resolve_llm_connection(connection: dict, task) -> dict:
     conn = connection or {}
     if not conn.get("base_url"):
@@ -232,8 +313,11 @@ def resolve_llm_connection(connection: dict, task) -> dict:
         except Exception:
             pass
     candidates = _connection_candidates(conn)
+    failures: list[tuple[dict, str]] = []
     for index, candidate in enumerate(candidates):
         ok, detail = _is_connection_healthy(candidate)
+        if not ok:
+            failures.append((candidate, detail))
         task.emit(
             "agent_state",
             {
@@ -259,18 +343,38 @@ def resolve_llm_connection(connection: dict, task) -> dict:
                 },
             )
             return selected
-    # No healthy candidate; fall back to original so existing behavior remains.
+    # No healthy candidate. Still proceed: the probe only checks a models
+    # endpoint, and some gateways serve chat while refusing that path, so a
+    # failed preflight is evidence rather than proof. But surface it loudly —
+    # previously this detail was recorded and then silently discarded, leaving
+    # the user with a generic API error and no idea their container could not
+    # see their machine.
     fallback = dict(connection or {})
     fallback.pop("fallback_chain", None)
+    base_url = str(fallback.get("base_url") or "")
+    detail = failures[0][1] if failures else "No healthy candidate."
+    hint = unreachable_hint(base_url, detail)
+
+    task.emit(
+        "llm_unreachable",
+        {
+            "base_url": base_url,
+            "api_type": str(fallback.get("api_type") or ""),
+            "model": str(fallback.get("model") or ""),
+            "detail": detail,
+            "hint": hint,
+            "attempted": len(candidates),
+        },
+    )
     task.emit(
         "agent_state",
         {
             "state": "llm_selected",
             "candidate_index": -1,
             "api_type": str(fallback.get("api_type") or ""),
-            "base_url": str(fallback.get("base_url") or ""),
+            "base_url": base_url,
             "model": str(fallback.get("model") or ""),
-            "detail": "No healthy fallback candidate; using primary settings.",
+            "detail": f"No healthy candidate; trying anyway. {detail}",
         },
     )
     return fallback

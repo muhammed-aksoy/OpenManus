@@ -17,6 +17,11 @@ services:
     command: uvicorn server.api:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
+    # Docker resolves host.docker.internal automatically on Mac and Windows but
+    # not on Linux. Without this, a local model server on the host (Ollama,
+    # LM Studio) is unreachable from the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/openmanus
       - CELERY_BROKER_URL=redis://redis:6379/0
@@ -40,6 +45,10 @@ services:
     build: .
     image: openmanus-worker:latest
     command: celery -A server.celery_app.celery_app worker -l info
+    # The worker is what actually calls the model, so it needs the host route
+    # just as much as the API does.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/openmanus
       - CELERY_BROKER_URL=redis://redis:6379/0

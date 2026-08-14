@@ -290,7 +290,9 @@ const MomentBody = ({ moment, isRunning }: { moment: Moment; isRunning: boolean 
       className={cn(
         // break-words so an unbroken URL or token wraps instead of widening
         // the pane and getting clipped by the panel's overflow-hidden.
-        'min-w-0 rounded-lg border p-3 text-sm break-words',
+        // whitespace-pre-line keeps the paragraph breaks in multi-part
+        // explanations such as an unreachable-server diagnosis.
+        'min-w-0 rounded-lg border p-3 text-sm break-words whitespace-pre-line',
         payload.tone === 'error'
           ? 'border-activity-error-border bg-activity-error-surface text-activity-error'
           : 'bg-muted/40',

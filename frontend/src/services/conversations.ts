@@ -1,3 +1,4 @@
+import { DEFAULT_HOSTS } from '@/libs/local-model-hosts';
 export interface Conversation {
   id: string;
   conversation_id: string;
@@ -245,9 +246,7 @@ export function getActiveConnectionPayload(selectedModel?: string): Record<strin
     const api_type = styleToApiType[style] || style;
     let base_url = activeProfile.host || '';
     if (!base_url) {
-      if (activeProfile.style === 'lm-studio') base_url = 'http://127.0.0.1:1234';
-      else if (activeProfile.style === 'ollama') base_url = 'http://127.0.0.1:11434';
-      else if (activeProfile.style === 'openai') base_url = 'https://api.openai.com/v1';
+      base_url = DEFAULT_HOSTS[activeProfile.style as keyof typeof DEFAULT_HOSTS] ?? '';
     }
     return {
       base_url,

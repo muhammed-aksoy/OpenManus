@@ -368,6 +368,35 @@ export const deriveMoments = (messages: Message[]): Moment[] => {
         break;
       }
 
+      case 'agent:lifecycle:llm:unreachable': {
+        // The most actionable failure in the product: the model server could
+        // not be reached before the run even started.
+        const baseUrl = asString(content.base_url) || 'the configured host';
+        const hint = asString(content.hint);
+        const detail = asString(content.detail);
+        moments.push({
+          id,
+          kind: 'error',
+          at,
+          title: 'Cannot reach the model server',
+          detail: baseUrl,
+          running: false,
+          payload: {
+            type: 'note',
+            text: [
+              `OpenManus could not reach ${baseUrl}.`,
+              detail && `The connection failed with: ${detail}`,
+              hint,
+              'The run continued anyway, so any error below is likely a symptom of this.',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+            tone: 'error',
+          },
+        });
+        break;
+      }
+
       case 'agent:lifecycle:step:error':
       case 'agent:lifecycle:terminated': {
         const text =

@@ -1,3 +1,4 @@
+import { DEFAULT_HOSTS } from '@/libs/local-model-hosts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -373,7 +374,7 @@ export default function AdminPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Base URL</Label>
                 <Input
-                  placeholder="http://127.0.0.1:1234"
+                  placeholder={DEFAULT_HOSTS['lm-studio']}
                   value={settings.llm_connection.base_url || ''}
                   onChange={event =>
                     setSettings({ ...settings, llm_connection: { ...settings.llm_connection, base_url: event.target.value } })
@@ -476,7 +477,7 @@ export default function AdminPage() {
                 value={fallbackChainText}
                 onChange={event => setFallbackChainText(event.target.value)}
                 placeholder={`[
-  { "api_type": "lmstudio", "base_url": "http://127.0.0.1:1234", "model": "qwen3.5" },
+  { "api_type": "lmstudio", "base_url": "http://host.docker.internal:1234", "model": "qwen3.5" },
   { "api_type": "openai", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini" }
 ]`}
               />
