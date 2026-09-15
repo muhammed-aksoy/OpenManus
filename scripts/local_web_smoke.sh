@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONDONTWRITEBYTECODE=1
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -12,6 +14,9 @@ cleanup() {
     kill "$(cat "$SERVER_PID_FILE")" >/dev/null 2>&1 || true
     rm -f "$SERVER_PID_FILE"
   fi
+  rm -f "$SERVER_LOG" /tmp/openmanus_web_smoke_* 2>/dev/null || true
+  find "$ROOT_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+  find "$ROOT_DIR" -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 }
 trap cleanup EXIT
 
